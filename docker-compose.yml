@@ -2,18 +2,11 @@ services:
 
   # --- Config servers ---
   configsvr1:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: configsvr1
-    depends_on:
-      - shard1-a
-      - shard1-b
-      - shard1-c
-      - shard2-a
-      - shard2-b
-      - shard2-c
-      - shard3-a
-      - shard3-b
-      - shard3-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --configsvr
@@ -22,24 +15,18 @@ services:
       - --port
       - "27019"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - configsvr1_data:/data/configdb
       
 
   configsvr2:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: configsvr2
-    depends_on:
-      - shard1-a
-      - shard1-b
-      - shard1-c
-      - shard2-a
-      - shard2-b
-      - shard2-c
-      - shard3-a
-      - shard3-b
-      - shard3-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --configsvr
@@ -48,23 +35,17 @@ services:
       - --port
       - "27019"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - configsvr2_data:/data/configdb
 
   configsvr3:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: configsvr3
-    depends_on:
-      - shard1-a
-      - shard1-b
-      - shard1-c
-      - shard2-a
-      - shard2-b
-      - shard2-c
-      - shard3-a
-      - shard3-b
-      - shard3-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --configsvr
@@ -73,14 +54,18 @@ services:
       - --port
       - "27019"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - configsvr3_data:/data/configdb
 
   # --- Shard 1 (replica set rs-shard-01) ---
   shard1-a:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard1-a
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -89,13 +74,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard1a_data:/data/db
 
   shard1-b:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard1-b
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -104,13 +93,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard1b_data:/data/db
 
   shard1-c:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard1-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -119,14 +112,18 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard1c_data:/data/db
 
   # --- Shard 2 (replica set rs-shard-02) ---
   shard2-a:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard2-a
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -135,13 +132,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard2a_data:/data/db
 
   shard2-b:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard2-b
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -150,13 +151,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard2b_data:/data/db
 
   shard2-c:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard2-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -165,14 +170,18 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard2c_data:/data/db
 
   # --- Shard 3 (replica set rs-shard-03) ---
   shard3-a:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard3-a
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -181,13 +190,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard3a_data:/data/db
 
   shard3-b:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard3-b
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -196,13 +209,17 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard3b_data:/data/db
 
   shard3-c:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: shard3-c
+    entrypoint: ["docker-entrypoint.sh"]
     command:
       - mongod
       - --shardsvr
@@ -211,14 +228,24 @@ services:
       - --port
       - "27018"
       - --bind_ip_all
-      #- --keyFile /data/keyfile/mongo-keyfile
+      #- --keyFile
+      #- /scripts/mongo-keyfile
     volumes:
       - shard3c_data:/data/db
 
   # --- Mongos router ---
   router:
-    image: mongo:latest
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     container_name: router
+    entrypoint: ["docker-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--host", "127.0.0.1", "--port", "27017",
+           "--eval", "db.adminCommand({ping:1})"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
     depends_on:
       - configsvr1
       - configsvr2
@@ -235,6 +262,7 @@ services:
     command: >
       mongos --configdb rs-config/configsvr1:27019,configsvr2:27019,configsvr3:27019
             --bind_ip_all --port 27017
+    #        --keyFile /scripts/mongo-keyfile
     ports:
       - "27017:27017"
     volumes:
@@ -244,13 +272,18 @@ services:
   init:
     image: mongo:latest
     container_name: init
+    command:
+    #- --keyFile
+    #- /scripts/mongo-keyfile
     depends_on:
-      - router
+      router:
+        condition: service_healthy
     entrypoint:
       - bash
       - /scripts/init-cluster.sh
     volumes:
       - ./scripts:/scripts
+      - ./Data:/data
 
 volumes:
   configsvr1_data: {}
