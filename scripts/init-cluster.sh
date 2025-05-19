@@ -1,22 +1,6 @@
 #!/bin/bash
 
-set -e
-
-# Function to wait until MongoDB is available
-wait_for_mongo() {
-  host=$1; port=$2
-  echo "Waiting for MongoDB at $host:$port..."
-  until mongosh --host "$host" --port "$port" --eval "db.adminCommand({ ping: 1 })" &>/dev/null; do
-    sleep 1
-  done
-  echo "$host:$port is up"
-}
-
-#wait_for_mongo router 27017
-
-
 # 1) Inicializace config serverů
-wait_for_mongo configsvr1 27019
 mongosh --host configsvr1 --port 27019 <<EOF
 rs.initiate({
   _id: "rs-config",
@@ -35,7 +19,6 @@ echo "Config replica set initialized"
 for i in 1 2 3; do
   rs_name="rs-shard-0$i"
   primary_host="shard$i-a"
-  wait_for_mongo "$primary_host" 27018
   mongosh --host "$primary_host" --port 27018 <<EOF
 rs.initiate({
   _id: "$rs_name",
@@ -50,7 +33,6 @@ EOF
 done
 
 # 3) Přidání shardů do clusteru
-wait_for_mongo router 27017
 mongosh --host router --port 27017 <<EOF
 sh.addShard("rs-shard-01/shard1-a:27018,shard1-b:27018,shard1-c:27018");
 sh.addShard("rs-shard-02/shard2-a:27018,shard2-b:27018,shard2-c:27018");
@@ -72,7 +54,6 @@ echo "Users created"
 
 # 5) Vytváření a kolekcí a validační schéma
 
-wait_for_port router 27017
 echo "--- Importing CSV into netflix_raw ---"
 mongoimport \
   --host router --port 27017 \
@@ -85,8 +66,6 @@ mongoimport \
   --headerline
 
 echo "CSV imported into netflix_raw"
-
-wait_for_port router 27017
 
 echo "--- Importing StudentsPerformance.csv into students_raw ---"
 mongoimport \
@@ -101,8 +80,6 @@ mongoimport \
 
 echo "StudentsPerformance.csv imported into students_raw"
 
-wait_for_port router 27017
-
 echo "--- Importing insurance.csv into medical_raw ---"
 mongoimport \
   --host router --port 27017 \
@@ -116,8 +93,6 @@ mongoimport \
 
 echo "insurance.csv imported into medical_raw"
 
-
-wait_for_mongo router 27017
 mongosh --host router --port 27017 \
   --username admin --password password \
   --authenticationDatabase admin <<EOF
@@ -259,7 +234,6 @@ echo "Data sent form _raw to correct format"
 
 # 6) Zapnutí shardingu a rozdělení kolekcí
 
-wait_for_mongo router 27017
 mongosh --host router --port 27017 \
   --username admin --password password \
   --authenticationDatabase admin <<EOF
