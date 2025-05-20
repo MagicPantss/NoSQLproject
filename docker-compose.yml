@@ -246,20 +246,6 @@ services:
     volumes:
       - ./Data:/data
 
-  # --- Init script ---
-  init:
-    image: mongo:latest
-    container_name: init
-    depends_on:
-      router:
-        condition: service_healthy
-    entrypoint:
-      - bash
-      - /scripts/init-cluster.sh
-    volumes:
-      - ./scripts:/scripts
-      - ./Data:/data
-
 volumes:
   configsvr1_data: {}
   configsvr2_data: {}

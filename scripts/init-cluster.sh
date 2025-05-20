@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# 1) Inicializace config serverů
-mongosh --host configsvr1 --port 27019 <<EOF
+docker exec -it configsvr1 mongosh --port 27019 --eval '
 rs.initiate({
   _id: "rs-config",
   configsvr: true,
@@ -10,96 +9,103 @@ rs.initiate({
     { _id: 1, host: "configsvr2:27019" },
     { _id: 2, host: "configsvr3:27019" }
   ]
-})
-EOF
+});
+'
+
+echo "Let me sleep for 20 seconds"
+sleep 5
+
+echo "admin ucet admin/password"
+echo "takhle se prihlas potom"
+echo "docker exec -it router mongosh --authenticationDatabase admin -u admin -p password"
 
 echo "Config replica set initialized"
 
 # 2) Inicializace shard replikačních setů
 for i in 1 2 3; do
-  rs_name="rs-shard-0$i"
-  primary_host="shard$i-a"
-  mongosh --host "$primary_host" --port 27018 <<EOF
-rs.initiate({
-  _id: "$rs_name",
-  members: [
-    { _id: 0, host: "shard${i}-a:27018" },
-    { _id: 1, host: "shard${i}-b:27018" },
-    { _id: 2, host: "shard${i}-c:27018" }
-  ]
-})
-EOF
-  echo "$rs_name initialized"
+  echo "Initializing rs-shard-0$i…"
+  docker exec shard${i}-a mongosh --port 27018 --eval "
+    rs.initiate({
+      _id: 'rs-shard-0$i',
+      members: [
+        { _id: 0, host: 'shard${i}-a:27018' },
+        { _id: 1, host: 'shard${i}-b:27018' },
+        { _id: 2, host: 'shard${i}-c:27018' }
+      ]
+    });
+  "
+  echo "✔ rs-shard-0$i initialized"
 done
+sleep 20
 
-# 3) Přidání shardů do clusteru
-mongosh --host router --port 27017 <<EOF
-sh.addShard("rs-shard-01/shard1-a:27018,shard1-b:27018,shard1-c:27018");
-sh.addShard("rs-shard-02/shard2-a:27018,shard2-b:27018,shard2-c:27018");
-sh.addShard("rs-shard-03/shard3-a:27018,shard3-b:27018,shard3-c:27018");
-EOF
+docker exec -it router mongosh --eval 'db.getSiblingDB("admin").createUser({user: "admin", pwd: "password", roles: [{ role: "root", db: "admin" }]});'
 
-echo "Shards added to cluster"
-
-
-# 4) Vytvoření userů
-mongosh --host router --port 27017 <<EOF
-use ProjectDatabase
-
-db.getSiblingDB("admin").createUser({user: "admin", pwd: "password", roles: [{ role: "root", db: "admin" }]});
-
-EOF
 
 echo "Users created"
+
+sleep 20
+
+
+for i in 1 2 3; do
+  echo "Adding rs-shard-0$i into cluster…"
+  docker exec -it router mongosh \
+    -u admin -p password --authenticationDatabase admin \
+    --eval "sh.addShard('rs-shard-0$i/shard${i}-a:27018,shard${i}-b:27018,shard${i}-c:27018')"
+done
+
+# Ověření:
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval "printjson(sh.status())"
+
+echo "SEM BY TO MELO FUNGOVAT"
+
+sleep 20
+
 
 # 5) Vytváření a kolekcí a validační schéma
 
 echo "--- Importing CSV into netflix_raw ---"
-mongoimport \
-  --host router --port 27017 \
-  --username admin --password password \
-  --authenticationDatabase admin \
+docker exec router mongoimport \
+  -u admin -p password --authenticationDatabase admin \
   --db ProjectDatabase \
   --collection netflix_raw \
   --type csv \
-  --file /data/netflix_titles.csv \
-  --headerline
-
-echo "CSV imported into netflix_raw"
+  --headerline \
+  --file /data/netflix_titles.csv
+echo "✔ netflix_raw imported"
 
 echo "--- Importing StudentsPerformance.csv into students_raw ---"
-mongoimport \
-  --host router --port 27017 \
-  --username admin --password password \
-  --authenticationDatabase admin \
+docker exec router mongoimport \
+  -u admin -p password --authenticationDatabase admin \
   --db ProjectDatabase \
   --collection students_raw \
   --type csv \
-  --file /data/StudentsPerformance.csv \
-  --headerline
-
-echo "StudentsPerformance.csv imported into students_raw"
+  --headerline \
+  --file /data/StudentsPerformance.csv
+echo "✔ students_raw imported"
 
 echo "--- Importing insurance.csv into medical_raw ---"
-mongoimport \
-  --host router --port 27017 \
-  --username admin --password password \
-  --authenticationDatabase admin \
+docker exec router mongoimport \
+  -u admin -p password --authenticationDatabase admin \
   --db ProjectDatabase \
   --collection medical_raw \
   --type csv \
-  --file /data/insurance.csv \
-  --headerline
+  --headerline \
+  --file /data/insurance.csv
+echo "✔ medical_raw imported"
 
-echo "insurance.csv imported into medical_raw"
+sleep 10
 
-mongosh --host router --port 27017 \
-  --username admin --password password \
-  --authenticationDatabase admin <<EOF
+docker exec -it router mongosh --authenticationDatabase admin -u admin -p password --eval 'db.getSiblingDB("ProjectDatabase").netflix.insertOne({ test: "data" });'
+
+ docker exec -it router mongosh \
+    -u admin -p password --authenticationDatabase admin \
+    --eval '
 use ProjectDatabase
 
 db.createCollection("netflix", {
-  validator: { \$jsonSchema: {
+  validator: { $jsonSchema: {
     bsonType: "object",
     required: ["show_id","type","title","release_year"],
     properties: {
@@ -125,40 +131,45 @@ db.createCollection("netflix", {
 
 db.netflix_raw.aggregate([
   {
-    \$addFields: {
-      show_id:       { \$toString: "\$show_id" },
-      title:         { \$toString: "\$title" },
+    $addFields: {
+      show_id:       { $toString: "$show_id" },
+      title:         { $toString: "$title" },
       date_added: {
-        \$cond: [
-          { \$or: [ { \$eq: ["\$date_added", null] }, { \$eq: ["\$date_added", ""] } ] },
+        $cond: [
+          { $or: [ { $eq: ["$date_added", null] }, { $eq: ["$date_added", ""] } ] },
           null,
-          { \$toDate: "\$date_added" }
+          { $toDate: "$date_added" }
         ]
       },
       release_year: {
-        \$cond: [
-          { \$or: [ { \$eq: ["\$release_year", null] }, { \$eq: ["\$release_year", ""] } ] },
+        $cond: [
+          { $or: [ { $eq: ["$release_year", null] }, { $eq: ["$release_year", ""] } ] },
           null,
-          { \$toInt: "\$release_year" }
+          { $toInt: "$release_year" }
         ]
       },
       listed_in: {
-        \$cond: [
-          { \$or: [ { \$eq: ["\$listed_in", null] }, { \$eq: ["\$listed_in", ""] } ] },
+        $cond: [
+          { $or: [ { $eq: ["$listed_in", null] }, { $eq: ["$listed_in", ""] } ] },
           [],
-          { \$split: ["\$listed_in", ", "] }
+          { $split: ["$listed_in", ", "] }
         ]
       }
     }
   },
-  { \$out: "netflix" }
+  { $out: "netflix" }
 ], { allowDiskUse: true });
+'
 
-print("Imported documents:", db.netflix.count());
+sleep 2
 
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval '
+use ProjectDatabase
 db.createCollection("students", {
   validator: {
-    \$jsonSchema: {
+    $jsonSchema: {
       bsonType: "object",
       required: ["gender","parental level of education","math score","reading score","writing score"],
       properties: {
@@ -178,23 +189,38 @@ db.createCollection("students", {
   validationLevel: "strict",
   validationAction: "error"
 })
+'
 
+sleep 2
+
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval '
+use ProjectDatabase
 db.students_raw.aggregate([
   {
-    \$addFields: {
-      "math score":    { \$toInt: "\$math score" },
-      "reading score": { \$toInt: "\$reading score" },
-      "writing score": { \$toInt: "\$writing score" }
+    $addFields: {
+      "math score":    { $toInt: "$math score" },
+      "reading score": { $toInt: "$reading score" },
+      "writing score": { $toInt: "$writing score" }
     }
   },
-  { \$out: "students" }
+  { $out: "students" }
 ], { allowDiskUse: true })
 
 print("Imported documents:", db.students.count());
+'
+
+sleep 2
+
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval '
+use ProjectDatabase
 
 db.createCollection("medical_cost", {
   validator: {
-    \$jsonSchema: {
+    $jsonSchema: {
       bsonType: "object",
       required: ["age","sex","bmi","charges"],
       properties: {
@@ -213,30 +239,38 @@ db.createCollection("medical_cost", {
   validationLevel: "strict",
   validationAction: "error"
 })
+'
+
+sleep 2
+
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval '
+use ProjectDatabase
 
 db.medical_raw.aggregate([
   {
-    \$addFields: {
-      age:      { \$toInt:    "\$age" },
-      bmi:      { \$toDouble: "\$bmi" },
-      children: { \$toInt:    "\$children" },
-      charges:  { \$toDouble: "\$charges" }
+    $addFields: {
+      age:      { $toInt:    "$age" },
+      bmi:      { $toDouble: "$bmi" },
+      children: { $toInt:    "$children" },
+      charges:  { $toDouble: "$charges" }
     }
   },
-  { \$out: "medical_cost" }
+  { $out: "medical_cost" }
 ], { allowDiskUse: true })
 
 print("Imported documents:", db.medical_cost.count());
-
-EOF
+'
+sleep 2
 
 echo "Data sent form _raw to correct format"
 
 # 6) Zapnutí shardingu a rozdělení kolekcí
 
-mongosh --host router --port 27017 \
-  --username admin --password password \
-  --authenticationDatabase admin <<EOF
+docker exec -it router mongosh \
+  -u admin -p password --authenticationDatabase admin \
+  --eval '
 use ProjectDatabase
 
 sh.enableSharding("ProjectDatabase")
@@ -254,7 +288,7 @@ sh.shardCollection("ProjectDatabase.students", { _id: "hashed" })
 db.medical_cost.createIndex({ _id: "hashed" })
 sh.shardCollection("ProjectDatabase.medical_cost", { _id: "hashed" })
 
-EOF
+'
 
 echo "Collections sharded"
 echo "Cluster initialization complete."
