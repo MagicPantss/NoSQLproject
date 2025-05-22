@@ -12,7 +12,7 @@ rs.initiate({
 });
 '
 
-echo "Let me sleep for 20 seconds"
+echo "Let me sleep for 5 seconds"
 sleep 5
 
 echo "admin ucet admin/password"
@@ -36,14 +36,15 @@ for i in 1 2 3; do
   "
   echo "✔ rs-shard-0$i initialized"
 done
+echo "Let me sleep for 20 seconds"
 sleep 20
 
 docker exec -it router mongosh --eval 'db.getSiblingDB("admin").createUser({user: "admin", pwd: "password", roles: [{ role: "root", db: "admin" }]});'
 
 
 echo "Users created"
-
-sleep 20
+echo "Let me sleep for 15 seconds"
+sleep 15
 
 
 for i in 1 2 3; do
@@ -54,13 +55,12 @@ for i in 1 2 3; do
 done
 
 # Ověření:
-docker exec -it router mongosh \
-  -u admin -p password --authenticationDatabase admin \
-  --eval "printjson(sh.status())"
+#docker exec -it router mongosh \
+#  -u admin -p password --authenticationDatabase admin \
+#  --eval "printjson(sh.status())"
 
-echo "SEM BY TO MELO FUNGOVAT"
-
-sleep 20
+echo "Let me sleep for 15 seconds"
+sleep 15
 
 
 # 5) Vytváření a kolekcí a validační schéma
@@ -95,17 +95,27 @@ docker exec router mongoimport \
   --file /data/insurance.csv
 echo "✔ medical_raw imported"
 
-sleep 10
+echo "Let me sleep for 5 seconds"
+sleep 5
 
-docker exec -it router mongosh --authenticationDatabase admin -u admin -p password --eval 'db.getSiblingDB("ProjectDatabase").netflix.insertOne({ test: "data" });'
+#docker exec -it router mongosh --authenticationDatabase admin -u admin -p password --eval 'db.getSiblingDB("ProjectDatabase").netflix.insertOne({ test: "data" });'
+
+docker exec -it router mongosh \
+    -u admin -p password --authenticationDatabase admin \
+    --eval '
+    db = db.getSiblingDB("ProjectDatabase"); 
+    sh.enableSharding("ProjectDatabase");'
+
+docker exec -it router mongosh \
+    -u admin -p password --authenticationDatabase admin \
+    --eval '
+      sh.setBalancerState(true);'
 
  docker exec -it router mongosh \
     -u admin -p password --authenticationDatabase admin \
-    --eval '
-use ProjectDatabase
-
-db.createCollection("netflix", {
-  validator: { $jsonSchema: {
+    --eval 'db = db.getSiblingDB("ProjectDatabase");  
+  db.createCollection("netflix", {
+    validator: { $jsonSchema: {
     bsonType: "object",
     required: ["show_id","type","title","release_year"],
     properties: {
@@ -120,16 +130,14 @@ db.createCollection("netflix", {
       release_year: { bsonType: ["int"], description: "rok jako číslo" },
       rating:       { bsonType: ["string","null"] },
       duration:     { bsonType: ["string","null"] },
-      listed_in:    { bsonType: ["array"], items: { bsonType: "string" } },
+      listed_in:    { bsonType: ["array"], items: { bsonType: "string" } }, 
       description:  { bsonType: "string" }
     },
     additionalProperties: false
   }},
   validationLevel: "strict",
   validationAction: "error"
-});
-
-db.netflix_raw.aggregate([
+});db.netflix_raw.aggregate([
   {
     $addFields: {
       show_id:       { $toString: "$show_id" },
@@ -158,15 +166,15 @@ db.netflix_raw.aggregate([
     }
   },
   { $out: "netflix" }
-], { allowDiskUse: true });
-'
+], { allowDiskUse: true });'
 
+echo "Let me sleep for 2 seconds"
 sleep 2
 
 docker exec -it router mongosh \
   -u admin -p password --authenticationDatabase admin \
   --eval '
-use ProjectDatabase
+db = db.getSiblingDB("ProjectDatabase");
 db.createCollection("students", {
   validator: {
     $jsonSchema: {
@@ -188,15 +196,8 @@ db.createCollection("students", {
   },
   validationLevel: "strict",
   validationAction: "error"
-})
-'
+});
 
-sleep 2
-
-docker exec -it router mongosh \
-  -u admin -p password --authenticationDatabase admin \
-  --eval '
-use ProjectDatabase
 db.students_raw.aggregate([
   {
     $addFields: {
@@ -211,13 +212,13 @@ db.students_raw.aggregate([
 print("Imported documents:", db.students.count());
 '
 
+echo "Let me sleep for 2 seconds"
 sleep 2
 
 docker exec -it router mongosh \
   -u admin -p password --authenticationDatabase admin \
   --eval '
-use ProjectDatabase
-
+db = db.getSiblingDB("ProjectDatabase");
 db.createCollection("medical_cost", {
   validator: {
     $jsonSchema: {
@@ -238,15 +239,7 @@ db.createCollection("medical_cost", {
   },
   validationLevel: "strict",
   validationAction: "error"
-})
-'
-
-sleep 2
-
-docker exec -it router mongosh \
-  -u admin -p password --authenticationDatabase admin \
-  --eval '
-use ProjectDatabase
+});
 
 db.medical_raw.aggregate([
   {
@@ -258,10 +251,12 @@ db.medical_raw.aggregate([
     }
   },
   { $out: "medical_cost" }
-], { allowDiskUse: true })
+], { allowDiskUse: true });
 
 print("Imported documents:", db.medical_cost.count());
 '
+
+echo "Let me sleep for 2 seconds"
 sleep 2
 
 echo "Data sent form _raw to correct format"
@@ -271,23 +266,20 @@ echo "Data sent form _raw to correct format"
 docker exec -it router mongosh \
   -u admin -p password --authenticationDatabase admin \
   --eval '
-use ProjectDatabase
-
-sh.enableSharding("ProjectDatabase")
+db = db.getSiblingDB("ProjectDatabase");
 
 // 1) Netflix podle show_id
-db.netflix.createIndex({ show_id: 1 })
-sh.shardCollection("ProjectDatabase.netflix", { show_id: 1 })
+db.netflix.createIndex({ show_id: 1 });
+sh.shardCollection("ProjectDatabase.netflix", { show_id: 1 });
 
 // 2) Students podle _id hashed
 // Mongo už má výchozí index { _id: 1 }, ale pro hashed musíme explicitně vytvořit hashed index:
-db.students.createIndex({ _id: "hashed" })
-sh.shardCollection("ProjectDatabase.students", { _id: "hashed" })
+db.students.createIndex({ _id: "hashed" });
+sh.shardCollection("ProjectDatabase.students", { _id: "hashed" });
 
 // 3) Medical_cost podle _id hashed
-db.medical_cost.createIndex({ _id: "hashed" })
-sh.shardCollection("ProjectDatabase.medical_cost", { _id: "hashed" })
-
+db.medical_cost.createIndex({ _id: "hashed" });
+sh.shardCollection("ProjectDatabase.medical_cost", { _id: "hashed" });
 '
 
 echo "Collections sharded"
