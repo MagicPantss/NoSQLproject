@@ -165,8 +165,18 @@ docker exec -it router mongosh \
       }
     }
   },
-  { $out: "netflix" }
-], { allowDiskUse: true });'
+  {
+    $merge: {
+      into: "netflix",
+      on: [ "_id" ],
+      whenMatched: "replace",
+      whenNotMatched: "insert"
+    }
+  }
+], { allowDiskUse: true });
+
+print("Imported documents:", db.netflix.count());
+'
 
 echo "Let me sleep for 2 seconds"
 sleep 2
@@ -206,7 +216,14 @@ db.students_raw.aggregate([
       "writing score": { $toInt: "$writing score" }
     }
   },
-  { $out: "students" }
+  {
+    $merge: {
+      into: "students",
+      on: ["_id"],
+      whenMatched: "replace",
+      whenNotMatched: "insert"
+    }
+  }
 ], { allowDiskUse: true })
 
 print("Imported documents:", db.students.count());
@@ -250,7 +267,14 @@ db.medical_raw.aggregate([
       charges:  { $toDouble: "$charges" }
     }
   },
-  { $out: "medical_cost" }
+  {
+    $merge: {
+      into: "medical_cost",
+      on: ["_id"],
+      whenMatched: "replace",
+      whenNotMatched: "insert"
+    }
+  }
 ], { allowDiskUse: true });
 
 print("Imported documents:", db.medical_cost.count());
@@ -269,8 +293,8 @@ docker exec -it router mongosh \
 db = db.getSiblingDB("ProjectDatabase");
 
 // 1) Netflix podle show_id
-db.netflix.createIndex({ show_id: 1 });
-sh.shardCollection("ProjectDatabase.netflix", { show_id: 1 });
+db.netflix.createIndex({ _id: "hashed" });
+sh.shardCollection("ProjectDatabase.netflix", { _id: "hashed" });
 
 // 2) Students podle _id hashed
 // Mongo už má výchozí index { _id: 1 }, ale pro hashed musíme explicitně vytvořit hashed index:
